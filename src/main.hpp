@@ -13,6 +13,17 @@ namespace levelload {
 	inline bool fastMode = true; // set once at startup from the "fast-mode" setting
 	// when set, processCreateObjectsFromSetup stops creating objects once this time passes
 	inline std::optional<std::chrono::steady_clock::time_point> deadline;
+
+	// timing for the log, so slow phases can be found
+	struct Stats {
+		std::chrono::steady_clock::time_point start{};
+		std::chrono::steady_clock::duration create{}; // main thread creating objects
+		std::chrono::steady_clock::duration wait{};   // main thread waiting for the parse thread
+	};
+	inline Stats stats;
+	inline double ms(std::chrono::steady_clock::duration d) {
+		return std::chrono::duration<double, std::milli>(d).count();
+	}
 }
 
 #define CHECK(expr) if (!expr) { log::warn("Failed: " #expr); }

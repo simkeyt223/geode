@@ -195,10 +195,16 @@ PropsComputer pc; // global, whatever
 // should be the same as original, besides the usage of `PropsCache` and `PropsComputer`,
 // and the ability to stop early once `levelload::deadline` has passed
 void PlayedLayer::processCreateObjectsFromSetup() {
+	using clock = std::chrono::steady_clock;
 	if (!levelload::fastMode) {
+		if (m_objectsCreated == 0) levelload::stats = {clock::now(), {}, {}};
 		PlayLayer::processCreateObjectsFromSetup();
+		if (m_loadingProgress >= 1.f) {
+			log::info("[timing] (fast mode off) {} objects, {:.0f} ms since load started", m_objectStrings.size(), levelload::ms(clock::now() - levelload::stats.start));
+		}
 		return;
 	}
+	auto const callStart = clock::now();
 
 	auto n = m_objectStrings.size();
 	auto kilos = n / 1000; // this took a bit to reverse
@@ -217,8 +223,10 @@ void PlayedLayer::processCreateObjectsFromSetup() {
 	if (inRange(first)) {
 
 		// a fresh load always starts at 0; this also recovers from a previously abandoned load
-		if (first == 0) pc.restart(this);
-		else pc.tryStart(this);
+		if (first == 0) {
+			pc.restart(this);
+			levelload::stats = {callStart, {}, {}};
+		} else pc.tryStart(this);
 
 		int nextToQueue = first;
 		auto lowDetail = m_level->m_lowDetailModeToggled;
@@ -232,7 +240,9 @@ void PlayedLayer::processCreateObjectsFromSetup() {
 				++nextToQueue;
 			}
 
+			auto const waitStart = clock::now();
 			auto& job = pc.fetch();
+			levelload::stats.wait += clock::now() - waitStart;
 
 			auto obj = GamedObject::newObjectFromVector(job.strs, job.games, this, lowDetail, job.cache);
 			if (!obj) continue;
@@ -289,10 +299,18 @@ void PlayedLayer::processCreateObjectsFromSetup() {
 	m_objectsCreated = i;
 	m_loadingProgress = std::min(1.f, (m_objectsCreated - 1.f) / m_objectStrings.size());
 	if (m_objectsCreated < m_objectStrings.size()) {
+		levelload::stats.create += clock::now() - callStart;
 		return;
 	}
+	levelload::stats.create += clock::now() - callStart;
 	pc.tryFinish();
+	auto const t1 = clock::now();
 	createObjectsFromSetupFinished();
+	auto const t2 = clock::now();
 	m_loadingProgress = 1.f;
 	setupHasCompleted();
+	auto const t3 = clock::now();
+	auto const& s = levelload::stats;
+	log::info("[timing] {} objects | {:.0f} ms since start | object loop {:.0f} ms (of which waiting on parse thread {:.0f} ms) | createObjectsFromSetupFinished {:.0f} ms | setupHasCompleted {:.0f} ms",
+		m_objectStrings.size(), levelload::ms(t3 - s.start), levelload::ms(s.create), levelload::ms(s.wait), levelload::ms(t2 - t1), levelload::ms(t3 - t2));
 }

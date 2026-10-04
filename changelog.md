@@ -1,3 +1,6 @@
+## 1.2.2
+- Log how long each loading phase takes (look for "[timing]" in the Geode log)
+
 ## 1.2.1
 - Fix very slow loading on Windows: the parsing thread no longer uses timed sleeps (which can last ~15ms); it is woken directly
 - Loading time per frame now defaults to 100%
